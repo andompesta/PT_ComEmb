@@ -94,7 +94,7 @@ def main():
     parser.add_argument('--input', nargs='?', required=True,
                       help='Input graph file')
 
-    parser.add_argument("-l", "--log", dest="log", default="INFO",
+    parser.add_argument("-l", "--log", dest="log", default="DEBUG",
                       help="log verbosity level")
 
     parser.add_argument('--matfile-variable-name', default='network',

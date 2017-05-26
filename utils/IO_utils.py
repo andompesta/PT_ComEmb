@@ -25,43 +25,15 @@ def save_embedding(embeddings, file_name, path='./data'):
         for node_id, embed in enumerate(embeddings):
             file.write(str(node_id+1) + '\t' + " ".join([str(val) for val in embed]) + '\n')
 
-def load_embedding(file_name, path='data'):
+def load_embedding(file_name, path='data', ext=".txt"):
     ret = []
-    with open(path + '/' + file_name + '.txt', 'r') as file:
+    with open(path_join(path, file_name + ext), 'r') as file:
         for line in file:
             tokens = line.strip().split('\t')
             node_values = [float(val) for val in tokens[1].strip().split(' ')]
             ret.append(node_values)
     ret = np.array(ret, dtype=np.float32)
     return ret
-
-def load_embedding_node2vec(file_name, path='data'):
-    ret = []
-    file_data = {}
-    with open(path + '/' + file_name + '.txt', 'r') as file:
-        for line in file:
-
-            tokens = line.strip().split(' ')
-            node_id = int(tokens.pop(0))
-            values = [float(token) for token in tokens]
-            file_data[node_id] = values
-
-    ret = [file_data[key] for key in sorted(file_data.keys())]
-    return np.array(ret, dtype=np.float32)
-
-def load_embedding_line(file_name, path='/Users/ando/Project/line/graph'):
-    ret = []
-    file_data = {}
-    with open(path + '/' + file_name + '.txt', 'r') as file:
-        for line in file:
-
-            tokens = line.strip().split('\t')
-            node_id = int(tokens[0])
-            values = [float(token) for token in tokens[1].split()]
-            file_data[node_id] = values
-
-    ret = [file_data[key] for key in sorted(file_data.keys())]
-    return np.array(ret)
 
 def save_membership(membership_matrix, file_name, path='data'):
     with open(path + '/' + file_name + '.txt', 'w') as file:

@@ -5,8 +5,6 @@ import logging
 import numpy as np
 from scipy.special import expit as sigmoid
 
-from ADSCModel.community_embeddings_old import sdg as sgd2
-
 logger = logging.getLogger("ADSC")
 
 try:
@@ -108,7 +106,17 @@ def chunkize_serial(iterable, chunksize, as_numpy=False):
         # memory opt: wrap the chunk and then pop(), to avoid leaving behind a dangling reference
         yield wrapped_chunk.pop()
 
-
+def prepare_sentences(model, paths):
+    '''
+    :param model: current model containing the vocabulary and the index
+    :param paths: list of the random walks. we have to translate the node to the appropriate index and apply the dropout
+    :return: generator of the paths according to the dropout probability and the correct index
+    '''
+    for path in paths:
+        # avoid calling random_sample() where prob >= 1, to speed things up a little:
+        sampled = [model.vocab[node] for node in path
+                   if node in model.vocab and (model.vocab[node].sample_probability >= 1.0 or model.vocab[node].sample_probability >= np.random.random_sample())]
+        yield sampled
 
 class RepeatCorpusNTimes():
     def __init__(self, corpus, n):
@@ -134,5 +142,5 @@ class Vocab(object):
         return self.count < other.count
 
     def __str__(self):
-        vals = ['%s:%r' % (key, self.__dict__[key]) for key in sorted(self.__dict__) if not key.startswith('_')]
-        return "<" + ', '.join(vals) + ">"
+        vals = ['{}:{}'.format(key, self.__dict__[key]) for key in sorted(self.__dict__) if not key.startswith('_')]
+        return "{}\t<{}>".format(self.__class__.__name__, ', '.join(vals))
