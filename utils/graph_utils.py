@@ -162,11 +162,67 @@ def _write_walks_to_disk(args):
     logger.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
     return f
 
-def write_walks_to_disk(G, filebase, num_paths, path_length, alpha=0, rand=random.Random(0), num_workers=cpu_count(), always_rebuild=True):
+def _write_examples_to_disk(args):
+    num_paths, path_length, alpha, rand, f, windows_size = args
+    G = __current_graph
+    t_0 = time()
+
+    def generate_labels(walk):
+        for pos, node in enumerate(walk):  # node = input vertex of the sistem
+            start = max(0, pos - windows_size)
+            # now go over all nodes from the (reduced) window, predicting each one in turn
+            for pos2, node2 in enumerate(walk[start: pos + windows_size + 1], start):  # node 2 are the output nodes predicted form node
+                start_w = max(0, pos2 - windows_size)
+                end_w = min(path_length - 1, pos2 + windows_size)
+                windows = walk[start_w: end_w + 1]
+                windows.remove(node2)
+                # make the windows all the same size
+                while len(windows) < 2 * windows_size:
+                    windows.append(np.random.choice(windows, replace=False))
+                yield (node2, windows)
+
+
+
+    with open(f, 'w') as fout:
+        for walk in build_deepwalk_corpus_iter(G=G, num_paths=num_paths, path_length=path_length, alpha=alpha, rand=rand):
+            for in_label, out_label in generate_labels(walk):
+                fout.write("{}\t{}\n".format(in_label, " ".join(__vertex2str[v] for v in out_label)))
+    logger.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
+    return f
+
+# def write_walks_to_disk(G, filebase, num_paths, path_length, alpha=0, rand=random.Random(0), num_workers=cpu_count(), always_rebuild=True):
+#     global __current_graph
+#     global __vertex2str
+#     __current_graph = G
+#     __vertex2str = {v:str(v) for v in sorted(G.nodes())}
+#     files_list = ["{}.{}".format(filebase, str(x)) for x in range(num_paths)]
+#     expected_size = len(G)
+#     args_list = []
+#     files = []
+#
+#     if num_paths <= num_workers:
+#         paths_per_worker = [1 for x in range(num_paths)]
+#     else:
+#         paths_per_worker = [len(list(filter(lambda z: z!= None, [y for y in x]))) for x in grouper(int(num_paths / num_workers)+1, range(1, num_paths+1))]
+#
+#     with ProcessPoolExecutor(max_workers=num_workers) as executor:
+#         for size, file_, ppw in zip(executor.map(count_lines, files_list), files_list, paths_per_worker):
+#             if always_rebuild or size != (ppw*expected_size):
+#                 args_list.append((ppw, path_length, alpha, random.Random(rand.randint(0, 2**31)), file_))
+#             else:
+#                 files.append(file_)
+#
+#     with ProcessPoolExecutor(max_workers=num_workers) as executor:
+#         for file_ in executor.map(_write_walks_to_disk, args_list):
+#             files.append(file_)
+#
+#     return files
+#
+def write_walks_to_disk(G, filebase, num_paths, path_length, windows_size, alpha=0, rand=random.Random(0), num_workers=cpu_count(), always_rebuild=True):
     global __current_graph
     global __vertex2str
     __current_graph = G
-    __vertex2str = {v:str(v) for v in G.nodes()}
+    __vertex2str = {v:str(v) for v in sorted(G.nodes())}
     files_list = ["{}.{}".format(filebase, str(x)) for x in range(num_paths)]
     expected_size = len(G)
     args_list = []
@@ -180,15 +236,24 @@ def write_walks_to_disk(G, filebase, num_paths, path_length, alpha=0, rand=rando
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         for size, file_, ppw in zip(executor.map(count_lines, files_list), files_list, paths_per_worker):
             if always_rebuild or size != (ppw*expected_size):
-                args_list.append((ppw, path_length, alpha, random.Random(rand.randint(0, 2**31)), file_))
+                args_list.append((ppw, path_length, alpha, random.Random(rand.randint(0, 2**31)), file_, windows_size))
             else:
                 files.append(file_)
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        for file_ in executor.map(_write_walks_to_disk, args_list):
+        for file_ in executor.map(_write_examples_to_disk, args_list):
             files.append(file_)
 
     return files
+
+def combine_example_files_iter(file_list):
+    for file in file_list:
+        if os.path.isfile(file):
+            with open(file, 'r') as f:
+                for line in f:
+                    tokens = line.strip().split("\t")
+                    yield int(tokens[0]), [int(node) for node in tokens[1].split()]
+
 
 def combine_files_iter(file_list):
     for file in file_list:

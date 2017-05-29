@@ -6,11 +6,13 @@ from os.path import exists
 from os import makedirs
 from utils.embedding import Vocab
 from utils.IO_utils import load_ground_true
-import torch
+import torch as t
 import torch.nn.init as t_init
+import torch.nn as nn
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
 
-dtype = torch.cuda.FloatTensor
+dtype = t.cuda.FloatTensor
+
 class ComEModel(object):
     '''
     class that keep track of all the parameters used during the learning of the embedding.
@@ -21,26 +23,14 @@ class ComEModel(object):
                  size=2,
                  down_sampling=0,
                  seed=1,
-                 table_size=100000000,
-                 node_embedding=None,
-                 context_embedding=None,
                  path_labels='data/',
                  input_file=None):
         '''
         :param nodes_degree: Dict with node_id: degree of node
         :param size: projection space
-        :param min_count: ignore all nodes with total frequency lower than this.
         :param downsampling: perform downsampling of common node
         :param seed: seed for random function
-        :param table_size: size of the negative sampling table
-        :param vocab: dictionary between a node and its count in the paths
         :param index2node: index between a node and its representation
-
-        :param node_embedding: matrix containing the node embedding
-        :param context_embedding: matrix containing the context embedding
-        :param community_embedding: matrix containing the community embedding
-        :param inv_covariance_mat: matrix representing the covariance matrix of the mixture clustering
-        :param pi: probability distribution of each node respect the communities
 
         :param path_labels: location of the file containing the ground true (label for each node)
         :param input_file: name of the file containing the ground true (label for each node)
@@ -48,24 +38,17 @@ class ComEModel(object):
         '''
         self.down_sampling = down_sampling
         self.seed = seed
-        self.loss = 0
 
         if size % 4 != 0:
             log.warn("consider setting layer size to a multiple of 4 for greater performance")
         self.layer1_size = int(size)
-        self.table_size = table_size
 
-        if context_embedding is not None:
-            self.context_embedding = context_embedding
-        if node_embedding is not None:
-            self.node_embedding = node_embedding
-        
         if nodes_degree is not None:
             self.build_vocab_(nodes_degree)
             self.ground_true, self.k = load_ground_true(path=path_labels, file_name=input_file)
             # inizialize node and context embeddings
             self.reset_weights()
-            self.make_table()
+            self.compute_negative_sampling_weight()
         else:
             log.info("Model not initialized")
 
@@ -102,17 +85,55 @@ class ComEModel(object):
             prob = (np.sqrt(v.count / threshold_count) + 1) * (threshold_count / v.count) if self.down_sampling else 1.0
             v.sample_probability = min(prob, 1.0)
 
+
     def reset_weights(self):
         """Reset all projection weights to an initial (untrained) state, but keep the existing vocabulary."""
-        self.node_embedding = torch.zeros(len(self.vocab), self.layer1_size).type(dtype)
-        t_init.uniform(self.node_embedding, a=-1., b=1.)
-
-        self.context_embedding = torch.zeros(len(self.vocab), self.layer1_size).type(dtype)
-
+        self.node_embedding = nn.Embedding(len(self.vocab), self.layer1_size)
+        self.node_embedding.weight = nn.Parameter(dtype(self.node_embedding.num_embeddings,
+                                                                self.node_embedding.embedding_dim).uniform_(-1, 1))
 
 
+        self.context_embedding = nn.Embedding(len(self.vocab), self.layer1_size)
+        self.context_embedding.weight = nn.Parameter(dtype(self.context_embedding.num_embeddings,
+                                                                   self.context_embedding.embedding_dim).uniform_(-1, 1))
 
-    def make_table(self, power=0.75):
+    def compute_negative_sampling_weight(self, power=0.75):
+        """
+        Compute the negative sampling probability
+        :param power: normalization probability
+        :return: 
+        """
+        log.info("constructing a table with noise distribution from %i nodes" % len(self.vocab))
+        vocab_size = len(self.vocab)
+        self.sampling_weight = t.zeros(vocab_size).type(dtype)
+        if not vocab_size:
+            log.error("empty vocabulary in, is this intended?")
+            return
+
+        train_nodes_pow = float(sum([self.vocab[node].count ** power for node in self.vocab]))          # sum for normalization
+        for node_id, node in self.vocab.items():
+            prob = node.count ** power / train_nodes_pow                                    # compute negative sampling prob for each word
+            assert prob >= 0., "each sampling prob should be greater than 0"
+            self.sampling_weight[node.index] = prob
+
+        # NORMALIZING
+        # TODO: check if it is needed the second normalization
+        # sum_weights = sum(self.sampling_weight)
+        # self.sampling_weight = [w / sum_weights for w in self.sampling_weight]
+
+    def negative_sample(self, n_samples):
+        """
+        draws a sample from classes based on weights
+        :param n_samples: number of negative sample
+        :return: 
+        """
+        draw = np.random.choice(len(self.vocab), n_samples, p=self.sampling_weight)
+        return np.array(draw)
+
+    def node_embeddings(self):
+        return self.node_embeddings.weight.data.cpu().numpy()
+
+    def __make_table__(self, power=0.75):
         """
         Create a table using stored vocabulary node counts for drawing random nodes in the negative
         sampling training routines.
@@ -123,7 +144,7 @@ class ComEModel(object):
         log.info("constructing a table with noise distribution from %i nodes" % len(self.vocab))
         # table (= list of nodes) of noise distribution for negative sampling
         vocab_size = len(self.vocab)
-        self.table = torch.zeros(self.table_size).type(dtype)
+        self.table = t.zeros(self.table_size).type(dtype)
 
         if not vocab_size:
             log.error("empty vocabulary in, is this intended?")

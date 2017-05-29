@@ -1,11 +1,13 @@
 __author__ = 'ando'
 import itertools
 import logging
-
+import torch as t
 import numpy as np
 from scipy.special import expit as sigmoid
 
 logger = logging.getLogger("ADSC")
+
+long_tensor = t.LongTensor
 
 try:
     from utils.my_fast_training import train_sentence_sg, FAST_VERSION
@@ -70,10 +72,6 @@ except ImportError as e:
         gb = (neg_labels - fb) * _alpha# vector of error gradients multiplied by the learning rate
         return gb
 
-# def training_sentence_2(py_node_embedding, py_context_embedding, py_path, py_alpha, py_negative, py_window, py_table, py_work, py_size, py_lambda1):
-#     return train_2st_sg(py_node_embedding, py_context_embedding,
-#                         py_path, py_alpha, py_negative, py_window, py_table, py_work, py_size,
-#                         py_lambda1)
 
 def train_sentence(py_node_embedding, py_context_embedding, py_path, py_alpha, py_negative, py_window, py_table, py_lambda1,
                    py_centroid, py_inv_covariance_mat, py_pi, py_k, py_lambda2,
@@ -94,29 +92,34 @@ def chunkize_serial(iterable, chunksize, as_numpy=False):
     """
 
     it = iter(iterable)
-    while True:
-        if as_numpy:
-            # convert each document to a 2d numpy array (~6x faster when transmitting
-            # chunk data over the wire, in Pyro)
-            wrapped_chunk = [[np.array(doc) for doc in itertools.islice(it, int(chunksize))]]
-        else:
-            wrapped_chunk = [list(itertools.islice(it, int(chunksize)))]
-        if not wrapped_chunk[0]:
-            break
-        # memory opt: wrap the chunk and then pop(), to avoid leaving behind a dangling reference
-        yield wrapped_chunk.pop()
 
-def prepare_sentences(model, paths):
+    b_input, b_output = map(list, zip(*itertools.islice(it, int(chunksize))))
+    try:
+        while (b_input, b_output):
+            yield long_tensor(b_input), long_tensor(b_output)
+            b_input, b_output = map(list, zip(*itertools.islice(it, int(chunksize))))
+    except ValueError as e:
+        print("end of dataset")
+
+
+    # batch_input = [[]]
+    # batch_output = [[]]
+    # while input, outputs in itertools.islice(it, int(chunksize)):
+    #     batch_input[0].append(input)
+    #     batch_output[0].append(outputs)
+    # yield long_tensor(batch_input.pop()), long_tensor(batch_output.pop())
+
+def prepare_sentences(model, examples):
     '''
     :param model: current model containing the vocabulary and the index
     :param paths: list of the random walks. we have to translate the node to the appropriate index and apply the dropout
     :return: generator of the paths according to the dropout probability and the correct index
     '''
-    for path in paths:
-        # avoid calling random_sample() where prob >= 1, to speed things up a little:
-        sampled = [model.vocab[node] for node in path
-                   if node in model.vocab and (model.vocab[node].sample_probability >= 1.0 or model.vocab[node].sample_probability >= np.random.random_sample())]
-        yield sampled
+    for input_labels, out_labels in examples:
+        if model.vocab[input_labels].sample_probability >= 1.0 or model.vocab[input_labels].sample_probability >= np.random.random_sample():
+            yield model.vocab[input_labels].index, [model.vocab[node].index for node in out_labels]
+        else:
+            continue
 
 class RepeatCorpusNTimes():
     def __init__(self, corpus, n):
@@ -131,6 +134,39 @@ class RepeatCorpusNTimes():
                 yield document
 
 
+# def generate_batch(X, batch_size, num_skips=2, window_size=5):
+#     """
+#     batch generation for o1 and o2
+#     :param X: input data
+#     :param batch_size: size of the batch
+#     :param num_skips: How many times the same input is used to generate a label
+#     :return:
+#     """
+#     global data_index
+#     assert batch_size % num_skips == 0
+#     assert num_skips <= 2 * window_size
+#     batch = torch.zeros(batch_size).type(short_dtype)
+#     labels = torch.zeros(batch_size, 1).type(short_dtype)
+#
+#     span = 2 * window_size + 1  # [ skip_window target skip_window ]
+#     buffer = deque(maxlen=span)
+#     for _ in range(span):
+#         buffer.append(X[data_index])
+#         data_index = (data_index + 1) % len(X)
+#     for i in range(batch_size // num_skips):
+#         target = window_size  # target label at the center of the buffer
+#         targets_to_avoid = [self.window_size]
+#         for j in range(num_skips):
+#             while target in targets_to_avoid:
+#                 target = random.randint(0, span - 1)
+#             targets_to_avoid.append(target)
+#             batch[i * num_skips + j] = buffer[self.window_size]
+#             labels[i * num_skips + j, 0] = buffer[target]
+#         buffer.append(X[data_index])
+#         data_index = (data_index + 1) % len(X)
+#     # Backtrack a little bit to avoid skipping words in the end of a batch
+#     data_index = (data_index + len(X) - span) % len(X)
+#     return batch, labels
 
 class Vocab(object):
     """A single vocabulary item, used internally for constructing binary trees (incl. both word leaves and inner nodes)."""

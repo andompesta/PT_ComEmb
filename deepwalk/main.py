@@ -74,7 +74,9 @@ def process(args):
                      size=args.representation_size,
                      window=args.window_size,
                      min_count=0,
-                     workers=args.workers)
+                     workers=args.workers,
+                     negative=4,
+                     hs=0)
 
     io_utils.save_embedding(model.syn0, file_name="{}".format(args.output), path="")
     model.save_word2vec_format("{}.emb".format(args.output))

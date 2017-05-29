@@ -7,13 +7,15 @@ import random
 from multiprocessing import cpu_count
 import numpy as np
 import psutil
-from model.my_word2vec import ComEModel
-from model.context_embedding import Context2Vec
+from pt_model.my_word2vec import ComEModel
+from pt_model.context_embedding import Context2Vec
+from pt_model.context_loss import NEG_loss
 import sys
 import utils.IO_utils as io_utils
 import utils.graph_utils as graph_utils
 import utils.plot_utils as plot_utils
-
+import utils.embedding as emb_utils
+from torch.optim.sgd import SGD
 import timeit
 
 
@@ -51,44 +53,45 @@ if __name__ == "__main__":
     input_file = "karate"
     output_file = "karate_my"
 
-    G = graph_utils.load_adjacencylist('data/' + input_file + '/' + input_file + '.adjlist', True)
+    G = graph_utils.load_adjacencylist('../data/' + input_file + '/' + input_file + '.adjlist', True)
+    model = ComEModel(G.degree(),
+                      size=representation_size,
+                      input_file=input_file + '/' + input_file,
+                      path_labels="../data")
+
+    neg_loss = NEG_loss(int(max(G.nodes())), representation_size)
+    optimizer = SGD(neg_loss.parameters(), 0.1)
+
+
     node_color = plot_utils.graph_plot(G=G,
                                        show=False,
                                        graph_name="karate",
                                        node_position_file=True,
-                                       node_position_path='data')
+                                       node_position_path='../data')
 
-    walks_filebase = os.path.join("./data/", output_file + ".walks")                       # where read/write the sampled path
+    exmple_filebase = os.path.join("../data/", output_file + ".exmple")                       # where read/write the sampled path
 
     # Sampling the random walks for context
-    walk_files = None
     log.info("sampling the paths")
-    walk_files = graph_utils.write_walks_to_disk(G, walks_filebase,
+    example_files = graph_utils.write_walks_to_disk(G, exmple_filebase,
+                                                 windows_size=window_size,
                                                  num_paths=num_walks,
                                                  path_length=walk_length,
-                                                 windows_size=window_size,
                                                  alpha=0,
                                                  rand=random.Random(9999999999),
                                                  num_workers=num_workers)
 
+    for batch in emb_utils.chunkize_serial(
+            emb_utils.prepare_sentences(model,
+                                        graph_utils.combine_example_files_iter(example_files)),
+            20,
+            True):
+        input, output = batch
+        loss = neg_loss.forward(input, output, negative)
 
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-    #Learning algorithm
-    cont_learner = Context2Vec(window_size=window_size, negative=negative, alpha=0.025)
-    vertex_counts = graph_utils.count_textfiles(walk_files, num_workers)
-
-    model = ComEModel(vertex_counts,
-                      size=representation_size,
-                      table_size=1000000,
-                      input_file=input_file + '/' + input_file)
-
-
-    context_total_nodes = G.number_of_nodes() * num_walks * walk_length
-    log.debug("context_total_nodes: %d" % (context_total_nodes))
-
-    cont_learner.train(model, graph_utils.combine_files_iter(walk_files), context_total_nodes)
-    io_utils.save_embedding(model.node_embedding, file_name="{}_ComE_l1-{}_l2-{}_ds-{}_it-{}".format(output_file,
-                                                                                                     0,
-                                                                                                     0,
-                                                                                                     0,
-                                                                                                     0))
+    word_embeddings = neg_loss.input_embeddings()
+    io_utils.save(word_embeddings, "pytorch_embedding", path="../data")

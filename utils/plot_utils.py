@@ -76,9 +76,6 @@ def graph_plot(G,
     norm_pos = np.linalg.norm(spring_pos_values, axis=1)
     nodes_color = nodes_color_fn(G, norm_pos)
 
-    plt.figure(figsize=(5, 5))
-    plt.axis("off")
-    nx.draw_networkx(G, node_color=nodes_color, pos=spring_pos, camp=plt.get_cmap(CAMP), nodelist=sorted(G.nodes()))
 
     # if nodes_color == None:
     #     color_map = list(plt.cm.rainbow(np.linspace(0.1, 0.9, G.number_of_nodes())))
@@ -108,10 +105,10 @@ def graph_plot(G,
     #     nx.draw_networkx_labels(G,spring_pos, labels,font_size=14)
 
     if show:
+        plt.figure(figsize=(5, 5))
+        plt.axis("off")
+        nx.draw_networkx(G, node_color=nodes_color, pos=spring_pos, camp=plt.get_cmap(CAMP), nodelist=sorted(G.nodes()))
         plt.show()
-    else:
-        plt.clf()
-        plt.close()
 
     return nodes_color
 
