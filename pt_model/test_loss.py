@@ -7,9 +7,9 @@ import random
 from multiprocessing import cpu_count
 import numpy as np
 import psutil
-from pt_model.my_word2vec import ComEModel
-from pt_model.context_embedding import Context2Vec
-from pt_model.context_loss import NEG_loss
+from pt_model.model import ComEModel
+from pt_model.context_embedding import Context2Emb
+from pt_model.node_embedding import Node2Emb
 import sys
 import utils.IO_utils as io_utils
 import utils.graph_utils as graph_utils
@@ -50,6 +50,9 @@ if __name__ == "__main__":
     representation_size = 2
     num_workers = 1
 
+    lambda_1 = 1.0
+    lambda_2 = 1.0
+
     input_file = "karate"
     output_file = "karate_my"
 
@@ -59,7 +62,8 @@ if __name__ == "__main__":
                       input_file=input_file + '/' + input_file,
                       path_labels="../data")
 
-    neg_loss = NEG_loss(int(max(G.nodes())), representation_size)
+    # neg_loss = Context2Emb(model, negative)
+    neg_loss = Node2Emb(model, negative)
     optimizer = SGD(neg_loss.parameters(), 0.1)
 
 
@@ -80,18 +84,21 @@ if __name__ == "__main__":
                                                  alpha=0,
                                                  rand=random.Random(9999999999),
                                                  num_workers=num_workers)
+    edges = np.array(G.edges())
+    edges = np.concatenate((edges, np.fliplr(edges)))
 
-    for batch in emb_utils.chunkize_serial(
+    for batch in emb_utils.batch_generator(
             emb_utils.prepare_sentences(model,
-                                        graph_utils.combine_example_files_iter(example_files)),
-            20,
-            True):
+                                        emb_utils.RepeatCorpusNTimes(edges, n=200),
+                                        # graph_utils.combine_example_files_iter(example_files),
+                                        neg_loss.transfer_fn(model.vocab)),
+            20):
         input, output = batch
-        loss = neg_loss.forward(input, output, negative)
+        loss = lambda_1 * neg_loss.forward(input, output, negative_sampling_fn=model.negative_sample)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
     word_embeddings = neg_loss.input_embeddings()
-    io_utils.save(word_embeddings, "pytorch_embedding", path="../data")
+    io_utils.save(word_embeddings, "pytorch_embedding_o1", path="../data")

@@ -7,11 +7,12 @@ from os import makedirs
 from utils.embedding import Vocab
 from utils.IO_utils import load_ground_true
 import torch as t
-import torch.nn.init as t_init
 import torch.nn as nn
+from torch.nn import Parameter
+
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
 
-dtype = t.cuda.FloatTensor
+f_type = t.cuda.FloatTensor
 
 class ComEModel(object):
     '''
@@ -61,6 +62,7 @@ class ComEModel(object):
         """
         # assign a unique index to each node
         self.vocab = {}
+
         for node_idx, (node, count) in enumerate(sorted(vocab.items(), key=lambda itm: itm[0])):
             v = Vocab()
             v.count = count
@@ -89,13 +91,11 @@ class ComEModel(object):
     def reset_weights(self):
         """Reset all projection weights to an initial (untrained) state, but keep the existing vocabulary."""
         self.node_embedding = nn.Embedding(len(self.vocab), self.layer1_size)
-        self.node_embedding.weight = nn.Parameter(dtype(self.node_embedding.num_embeddings,
-                                                                self.node_embedding.embedding_dim).uniform_(-1, 1))
+        self.node_embedding.weight = Parameter(f_type(len(self.vocab), self.layer1_size).uniform_(-1, 1))
 
 
         self.context_embedding = nn.Embedding(len(self.vocab), self.layer1_size)
-        self.context_embedding.weight = nn.Parameter(dtype(self.context_embedding.num_embeddings,
-                                                                   self.context_embedding.embedding_dim).uniform_(-1, 1))
+        self.context_embedding.weight = Parameter(f_type(len(self.vocab), self.layer1_size).uniform_(-1, 1))
 
     def compute_negative_sampling_weight(self, power=0.75):
         """
@@ -105,7 +105,7 @@ class ComEModel(object):
         """
         log.info("constructing a table with noise distribution from %i nodes" % len(self.vocab))
         vocab_size = len(self.vocab)
-        self.sampling_weight = t.zeros(vocab_size).type(dtype)
+        self.sampling_weight = np.zeros(vocab_size)
         if not vocab_size:
             log.error("empty vocabulary in, is this intended?")
             return
@@ -113,7 +113,7 @@ class ComEModel(object):
         train_nodes_pow = float(sum([self.vocab[node].count ** power for node in self.vocab]))          # sum for normalization
         for node_id, node in self.vocab.items():
             prob = node.count ** power / train_nodes_pow                                    # compute negative sampling prob for each word
-            assert prob >= 0., "each sampling prob should be greater than 0"
+            assert prob > 0., "each sampling prob should be greater than 0"
             self.sampling_weight[node.index] = prob
 
         # NORMALIZING
@@ -144,7 +144,7 @@ class ComEModel(object):
         log.info("constructing a table with noise distribution from %i nodes" % len(self.vocab))
         # table (= list of nodes) of noise distribution for negative sampling
         vocab_size = len(self.vocab)
-        self.table = t.zeros(self.table_size).type(dtype)
+        self.table = t.zeros(self.table_size).type(f_type)
 
         if not vocab_size:
             log.error("empty vocabulary in, is this intended?")

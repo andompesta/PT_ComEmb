@@ -52,7 +52,6 @@ class NEG_loss(nn.Module):
         """
 
         use_cuda = self.out_embed.weight.is_cuda
-        print(out_labels.size())
         [batch_size, window_size] = out_labels.size()
 
         input = self.in_embed(Variable(input_labels.view(batch_size, 1).repeat(1, window_size).view(-1)))

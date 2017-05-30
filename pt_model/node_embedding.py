@@ -1,16 +1,17 @@
 __author__ = 'ando'
 
 import logging as log
+from functools import partial
 from torch.autograd import Variable
 import torch as t
 import torch.nn as nn
-from functools import partial
 
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
 short_dtype = t.cuda.ShortTensor
 long_tensor = t.cuda.LongTensor
 
-class Context2Emb(nn.Module):
+
+class Node2Emb(nn.Module):
     '''
     Class that train the context embedding
     '''
@@ -22,11 +23,10 @@ class Context2Emb(nn.Module):
         :param negative: number of negative samples
         :return:
         '''
-        super(Context2Emb, self).__init__()
+        super(Node2Emb, self).__init__()
         self.negative = negative
         self.node_embedding = model.node_embedding
-        self.context_embedding = model.context_embedding
-        self.weight = model.sampling_weight
+        self.context_embedding = model.node_embedding
 
     def forward(self, input_labels, out_labels, negative_sampling_fn):
         """
@@ -35,30 +35,27 @@ class Context2Emb(nn.Module):
         :param negative_sampling_fn: Function that sample negative nodes based on the weights
         :return: Loss estimation with shape of [1]
         """
-
         use_cuda = self.context_embedding.weight.is_cuda
 
-        [batch_size, window_size] = out_labels.size()
+        [batch_size] = out_labels.size()
 
-        input = self.node_embedding(Variable(input_labels.view(batch_size, 1).repeat(1, window_size).view(-1)))
+        input = self.node_embedding(Variable(input_labels.view(-1)))
         output = self.context_embedding(Variable(out_labels.view(-1)))
 
+        log_target = (input * output).sum(1).squeeze().sigmoid().log()  # loss of the positive example
+        # equivalente to t.bmm(t.transpose(t.unsqueeze(input, 2),1, 2), t.unsqueeze(output, 2)).squeeze()
 
         # SUBSAMPLE
-        noise_sample_count = batch_size * window_size * self.negative
+        noise_sample_count = batch_size * self.negative
         draw = negative_sampling_fn(noise_sample_count)
-        draw.resize((batch_size * window_size, self.negative))
+        draw.resize((batch_size, self.negative))
         noise = Variable(t.from_numpy(draw))
 
         if use_cuda:
             noise = noise.cuda()
         noise = self.context_embedding(noise).neg()
+        sum_log_sampled = t.bmm(noise, input.unsqueeze(2)).sigmoid().log().sum(1).squeeze()
 
-        log_target = (input * output).sum(1).squeeze().sigmoid().log()          # loss of the positive example
-
-        ''' ∑[batch_size * window_size, num_sampled, embed_size] * [batch_size * window_size, embed_size, 1] ->
-            ∑[batch_size, num_sampled, 1] -> [batch_size] '''
-        sum_log_sampled = t.bmm(noise, input.unsqueeze(2)).sigmoid().log().sum(1).squeeze()     # loss of the negative example
 
         loss = log_target + sum_log_sampled
 
@@ -68,4 +65,4 @@ class Context2Emb(nn.Module):
         return self.node_embedding.weight.data.cpu().numpy()
 
     def transfer_fn(self, model_dic):
-        return lambda input: list(map(partial(lambda x, vocab: vocab[x].index, vocab=model_dic), input))
+        return partial(lambda x, vocab: vocab[x].index, vocab=model_dic)

@@ -152,15 +152,15 @@ def load_adjacencylist(file_, undirected=False, chunksize=10000):
     return G
 
 
-def _write_walks_to_disk(args):
-    num_paths, path_length, alpha, rand, f = args
-    G = __current_graph
-    t_0 = time()
-    with open(f, 'w') as fout:
-        for walk in build_deepwalk_corpus_iter(G=G, num_paths=num_paths, path_length=path_length, alpha=alpha, rand=rand):
-            fout.write(u"{}\n".format(u" ".join(__vertex2str[v] for v in walk)))
-    logger.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
-    return f
+# def _write_walks_to_disk(args):
+#     num_paths, path_length, alpha, rand, f = args
+#     G = __current_graph
+#     t_0 = time()
+#     with open(f, 'w') as fout:
+#         for walk in build_deepwalk_corpus_iter(G=G, num_paths=num_paths, path_length=path_length, alpha=alpha, rand=rand):
+#             fout.write(u"{}\n".format(u" ".join(__vertex2str[v] for v in walk)))
+#     logger.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
+#     return f
 
 def _write_examples_to_disk(args):
     num_paths, path_length, alpha, rand, f, windows_size = args
@@ -186,7 +186,7 @@ def _write_examples_to_disk(args):
     with open(f, 'w') as fout:
         for walk in build_deepwalk_corpus_iter(G=G, num_paths=num_paths, path_length=path_length, alpha=alpha, rand=rand):
             for in_label, out_label in generate_labels(walk):
-                fout.write("{}\t{}\n".format(in_label, " ".join(__vertex2str[v] for v in out_label)))
+                fout.write("{}\t{}\n".format(in_label, " ".join("{}".format(v) for v in out_label)))
     logger.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
     return f
 
