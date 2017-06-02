@@ -180,7 +180,7 @@ class ComEModel(object):
         with open(path + '/' + file_name + '.bin', 'rb') as file:
             model = {}
             model.__dict__ = pickle.load(file)
-            log.info('model loaded , size: {} \t table_size: {} \t down_sampling: {} \t communities {}'.format(model.layer1_size,
+            log.info('deprecated_model loaded , size: {} \t table_size: {} \t down_sampling: {} \t communities {}'.format(model.layer1_size,
                                                                                                                model.table_size,
                                                                                                                model.downsampling,
                                                                                                                model.k))

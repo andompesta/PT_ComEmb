@@ -7,8 +7,7 @@ import torch as t
 import torch.nn as nn
 
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
-short_dtype = t.cuda.ShortTensor
-long_tensor = t.cuda.LongTensor
+
 
 
 class Node2Emb(nn.Module):
@@ -65,4 +64,8 @@ class Node2Emb(nn.Module):
         return self.node_embedding.weight.data.cpu().numpy()
 
     def transfer_fn(self, model_dic):
+        '''
+        Transfer function form edge=[node_id_1 node_id_b] to edge=[node_idx_1 node_idx_b]
+        :param model_dic: dictionary form node_id to node_data. Used for index substitution and sampling
+        '''
         return partial(lambda x, vocab: vocab[x].index, vocab=model_dic)

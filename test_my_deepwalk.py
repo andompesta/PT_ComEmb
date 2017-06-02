@@ -43,7 +43,7 @@ def learn_first(network, lr, model, edges, num_iter=1):
     Helper function used to optimize O1 and O3
     :param network: neural network to train
     :param lr: learning rate
-    :param model: model used to compute the batches and the negative sampling 
+    :param model: deprecated_model used to compute the batches and the negative sampling
     :param edges: numpy list of edges used for training
     :param num_iter: iteration number over the edges
     :return: 
@@ -67,7 +67,7 @@ def learn_second(network, lr, model, examples_files):
     Helper function used to optimize O1 and O3
     :param loss: loss to optimize
     :param lr: learning rate
-    :param model: model used to compute the batches and the negative sampling 
+    :param model: deprecated_model used to compute the batches and the negative sampling
     :param examples_files: list of files containing the examples
     :param num_iter: iteration number over the edges
     :return: 
@@ -106,7 +106,7 @@ if __name__ == "__main__":
                       input_file=input_file + '/' + input_file,
                       path_labels="./data")
 
-    # neg_loss = Context2Emb(model, negative)
+    # neg_loss = Context2Emb(deprecated_model, negative)
     o1_loss = Node2Emb(model, negative)
     o2_loss = Context2Emb(model, negative)
 
@@ -131,9 +131,9 @@ if __name__ == "__main__":
     edges = np.array(G.edges())
     edges = np.concatenate((edges, np.fliplr(edges)))
 
-    learn_first(o1_loss, alpha, model, edges, num_iter=100)
+    # learn_first(o1_loss, alpha, deprecated_model, edges, num_iter=100)
     learn_second(o2_loss, alpha, model, examples_files)
 
     assert np.array_equal(o1_loss.input_embeddings(), o2_loss.input_embeddings()), "node embedding is not the same"
     word_embeddings = o1_loss.input_embeddings()
-    io_utils.save(word_embeddings, "pytorch_embedding_o1", path="../data")
+    io_utils.save(word_embeddings, "pytorch_embedding_o2", path="./data")

@@ -129,7 +129,7 @@ def main():
                       help='Length of the random walk started at each node')
 
     parser.add_argument('--window-size', default=3, type=int,
-                      help='Window size of skipgram model.')
+                      help='Window size of skipgram deprecated_model.')
 
     parser.add_argument('--workers', default=1, type=int,
                       help='Number of parallel processes.')

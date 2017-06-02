@@ -7,8 +7,6 @@ import torch.nn as nn
 from functools import partial
 
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
-short_dtype = t.cuda.ShortTensor
-long_tensor = t.cuda.LongTensor
 
 class Context2Emb(nn.Module):
     '''
@@ -68,4 +66,8 @@ class Context2Emb(nn.Module):
         return self.node_embedding.weight.data.cpu().numpy()
 
     def transfer_fn(self, model_dic):
+        """
+        Transfer function from path=[node_id_1, node_id_2, ...] to path=[node_idx_1, node_idx_2, ...]
+        :param model_dic: dictionary form node_id to node_data. Used for index substitution and sampling
+        """
         return lambda input: list(map(partial(lambda x, vocab: vocab[x].index, vocab=model_dic), input))

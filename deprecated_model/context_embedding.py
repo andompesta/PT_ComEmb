@@ -30,17 +30,17 @@ class Context2Vec(object):
 
     def train(self, model, paths, total_nodes, chunksize=150):
         """
-        Update the model's neural weights from a sequence of paths (can be a once-only generator stream).
+        Update the deprecated_model's neural weights from a sequence of paths (can be a once-only generator stream).
         """
         assert model.node_embedding.dtype == np.float32
         assert model.context_embedding.dtype == np.float32
 
 
-        log.info("training model with %i workers on %i vocabulary and %i features and 'negative sampling'=%s" %
+        log.info("training deprecated_model with %i workers on %i vocabulary and %i features and 'negative sampling'=%s" %
                     (self.workers, len(model.vocab), model.layer1_size, self.negative))
 
         if not model.vocab:
-            raise RuntimeError("you must first build vocabulary before training the model")
+            raise RuntimeError("you must first build vocabulary before training the deprecated_model")
 
         start, next_report = time.time(), [1.0]
         if total_nodes is None:
@@ -51,7 +51,7 @@ class Context2Vec(object):
         lock = threading.Lock()  # for shared state (=number of nodes trained so far, log reports...)
 
         def worker_train():
-            """Train the model, lifting lists of paths from the jobs queue."""
+            """Train the deprecated_model, lifting lists of paths from the jobs queue."""
             while True:
                 job = jobs.get()
                 if job is None:  # data finished, exit
@@ -104,7 +104,7 @@ class Context2Vec(object):
                  py_work=None):
 
         """
-        Update skip-gram model by training on a single path.
+        Update skip-gram deprecated_model by training on a single path.
 
         The path is a list of Vocab objects (or None, where the corresponding
         node is not in the vocabulary. Called internally from `node2Vec.train()`.

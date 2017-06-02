@@ -40,7 +40,7 @@ def batch_generator(iterable, chunksize):
 
 def prepare_sentences(model, examples, transfer_fn):
     '''
-    :param model: current model containing the vocabulary and the index
+    :param model: current deprecated_model containing the vocabulary and the index
     :param examples: list of the example. we have to translate the node to the appropriate index and apply the dropout
     :param transfer_fn: function used to translate the output_labels
     :return: generator of the paths according to the dropout probability and the correct index
@@ -48,7 +48,7 @@ def prepare_sentences(model, examples, transfer_fn):
     for input_labels, out_labels in examples:
         if model.vocab[input_labels].sample_probability >= 1.0 or model.vocab[input_labels].sample_probability >= np.random.random_sample():
             yield model.vocab[input_labels].index, transfer_fn(out_labels)
-            # [model.vocab[node].index for node in out_labels]
+            # [deprecated_model.vocab[node].index for node in out_labels]
         else:
             continue
 

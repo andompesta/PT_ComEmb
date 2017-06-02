@@ -62,7 +62,7 @@ if __name__ == "__main__":
                       input_file=input_file + '/' + input_file,
                       path_labels="../data")
 
-    # neg_loss = Context2Emb(model, negative)
+    # neg_loss = Context2Emb(deprecated_model, negative)
     neg_loss = Node2Emb(model, negative)
     optimizer = SGD(neg_loss.parameters(), 0.1)
 
