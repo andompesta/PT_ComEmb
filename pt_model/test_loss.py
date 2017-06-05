@@ -1,7 +1,6 @@
 __author__ = 'ando'
 
 import logging as log
-import configparser
 import os
 import random
 from multiprocessing import cpu_count
@@ -10,15 +9,14 @@ import psutil
 from pt_model.model import ComEModel
 from pt_model.context_embedding import Context2Emb
 from pt_model.node_embedding import Node2Emb
+from pt_model.communities_embedding import Community2Emb
+
 import sys
 import utils.IO_utils as io_utils
 import utils.graph_utils as graph_utils
 import utils.plot_utils as plot_utils
 import utils.embedding as emb_utils
 from torch.optim.sgd import SGD
-import timeit
-
-
 
 p = psutil.Process(os.getpid())
 try:
@@ -29,6 +27,8 @@ except AttributeError:
     except AttributeError:
         pass
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
+
+
 def debug(type_, value, tb):
     if hasattr(sys, 'ps1') or not sys.stderr.isatty():
         sys.__excepthook__(type_, value, tb)
@@ -40,6 +40,55 @@ def debug(type_, value, tb):
         pdb.pm()
 
 
+def learn_first(network, lr, model, edges, num_iter=1):
+    """
+    Helper function used to optimize O1 and O3
+    :param network: neural network to train
+    :param lr: learning rate
+    :param model: deprecated_model used to compute the batches and the negative sampling
+    :param edges: numpy list of edges used for training
+    :param num_iter: iteration number over the edges
+    :return: 
+    """
+    log.info("computing o1")
+    optimizer = SGD(network.parameters(), lr)
+    for batch in emb_utils.batch_generator(
+            emb_utils.prepare_sentences(model,
+                                        emb_utils.RepeatCorpusNTimes(edges, n=num_iter),
+                                        network.transfer_fn(model.vocab)),
+            20):
+        input, output = batch
+        loss = network.forward(input, output, negative_sampling_fn=model.negative_sample)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+
+def learn_second(network, lr, model, examples_files, alpha=1.0):
+    """
+    Helper function used to optimize O1 and O3
+    :param loss: loss to optimize
+    :param lr: learning rate
+    :param model: deprecated_model used to compute the batches and the negative sampling
+    :param examples_files: list of files containing the examples
+    :param num_iter: iteration number over the edges
+    :return: 
+    """
+    log.info("compute o2")
+    optimizer = SGD(network.parameters(), lr)
+    log.debug("read example file: {}".format("\t".join(examples_files)))
+    for batch in emb_utils.batch_generator(
+            emb_utils.prepare_sentences(model,
+                                        graph_utils.combine_example_files_iter(examples_files),
+                                        network.transfer_fn(model.vocab)),
+            20):
+        input, output = batch
+        loss = (alpha * network.forward(input, output, negative_sampling_fn=model.negative_sample))
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
 
 if __name__ == "__main__":
@@ -49,56 +98,55 @@ if __name__ == "__main__":
     negative = 4
     representation_size = 2
     num_workers = 1
-
-    lambda_1 = 1.0
-    lambda_2 = 1.0
-
+    lr = 0.1
+    alpha = 1.0
+    beta = 1.0
+    num_iter = 200
     input_file = "karate"
     output_file = "karate_my"
+    path = "../data"
 
-    G = graph_utils.load_adjacencylist('../data/' + input_file + '/' + input_file + '.adjlist', True)
+    G = graph_utils.load_adjacencylist(os.path.join(path, input_file, input_file + '.adjlist'), True)
     model = ComEModel(G.degree(),
                       size=representation_size,
                       input_file=input_file + '/' + input_file,
-                      path_labels="../data")
-
-    # neg_loss = Context2Emb(deprecated_model, negative)
-    neg_loss = Node2Emb(model, negative)
-    optimizer = SGD(neg_loss.parameters(), 0.1)
-
+                      path_labels=path)
+    model.k = 2
+    o2_loss = Context2Emb(model, negative)
+    o3_loss = Community2Emb(model, reg_covar=0.00001)
 
     node_color = plot_utils.graph_plot(G=G,
                                        show=False,
                                        graph_name="karate",
                                        node_position_file=True,
-                                       node_position_path='../data')
+                                       node_position_path=path)
 
-    exmple_filebase = os.path.join("../data/", output_file + ".exmple")                       # where read/write the sampled path
+    exmple_filebase = os.path.join(path, output_file + ".exmple")  # where read/write the sampled path
+    num_iter = G.number_of_nodes() * num_walks * walk_length
 
     # Sampling the random walks for context
     log.info("sampling the paths")
-    example_files = graph_utils.write_walks_to_disk(G, exmple_filebase,
-                                                 windows_size=window_size,
-                                                 num_paths=num_walks,
-                                                 path_length=walk_length,
-                                                 alpha=0,
-                                                 rand=random.Random(9999999999),
-                                                 num_workers=num_workers)
-    edges = np.array(G.edges())
-    edges = np.concatenate((edges, np.fliplr(edges)))
+    examples_files = graph_utils.write_walks_to_disk(G, exmple_filebase,
+                                                     windows_size=window_size,
+                                                     num_paths=num_walks,
+                                                     path_length=walk_length,
+                                                     alpha=0,
+                                                     rand=random.Random(9999999999),
+                                                     num_workers=num_workers)
 
-    for batch in emb_utils.batch_generator(
-            emb_utils.prepare_sentences(model,
-                                        emb_utils.RepeatCorpusNTimes(edges, n=200),
-                                        # graph_utils.combine_example_files_iter(example_files),
-                                        neg_loss.transfer_fn(model.vocab)),
-            20):
-        input, output = batch
-        loss = lambda_1 * neg_loss.forward(input, output, negative_sampling_fn=model.negative_sample)
+    learn_second(o2_loss, lr, model, examples_files, alpha=alpha)
+    node_embeddings = o2_loss.input_embeddings()
+    io_utils.save(node_embeddings, "pytorch_embedding_test_o2", path="../data")
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    assert np.array_equal(model.get_node_embedding(), node_embeddings)
+    # test o3
+    o3_loss.fit(model)
+    optimizer = SGD(o3_loss.parameters(), lr)
 
-    word_embeddings = neg_loss.input_embeddings()
-    io_utils.save(word_embeddings, "pytorch_embedding_o1", path="../data")
+    loss = o3_loss.forward(model, beta)
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    io_utils.save(model.get_node_embedding(), "pytorch_embedding_test_o2_o3-", path="../data")

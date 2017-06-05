@@ -12,7 +12,7 @@ from torch.nn import Parameter
 
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
 
-f_type = t.cuda.FloatTensor
+f_type = t.FloatTensor
 
 class ComEModel(object):
     '''
@@ -90,12 +90,13 @@ class ComEModel(object):
 
     def reset_weights(self):
         """Reset all projection weights to an initial (untrained) state, but keep the existing vocabulary."""
-        self.node_embedding = nn.Embedding(len(self.vocab), self.layer1_size)
-        self.node_embedding.weight = Parameter(f_type(len(self.vocab), self.layer1_size).uniform_(-1, 1))
+        self.size = len(self.vocab)
+        self.node_embedding = nn.Embedding(self.size, self.layer1_size)
+        self.node_embedding.weight = Parameter(f_type(self.size, self.layer1_size).uniform_(-1, 1))
 
 
-        self.context_embedding = nn.Embedding(len(self.vocab), self.layer1_size)
-        self.context_embedding.weight = Parameter(f_type(len(self.vocab), self.layer1_size).uniform_(-1, 1))
+        self.context_embedding = nn.Embedding(self.size, self.layer1_size)
+        self.context_embedding.weight = Parameter(t.zeros(self.size, self.layer1_size).type(f_type))
 
     def compute_negative_sampling_weight(self, power=0.75):
         """
@@ -103,10 +104,10 @@ class ComEModel(object):
         :param power: normalization probability
         :return: 
         """
-        log.info("constructing a table with noise distribution from %i nodes" % len(self.vocab))
-        vocab_size = len(self.vocab)
-        self.sampling_weight = np.zeros(vocab_size)
-        if not vocab_size:
+        log.info("constructing a table with noise distribution from %i nodes" % self.size)
+
+        self.sampling_weight = np.zeros(self.size)
+        if not self.size:
             log.error("empty vocabulary in, is this intended?")
             return
 
@@ -127,44 +128,12 @@ class ComEModel(object):
         :param n_samples: number of negative sample
         :return: 
         """
-        draw = np.random.choice(len(self.vocab), n_samples, p=self.sampling_weight)
+        draw = np.random.choice(self.size, n_samples, p=self.sampling_weight)
         return np.array(draw)
 
-    def node_embeddings(self):
-        return self.node_embeddings.weight.data.cpu().numpy()
+    def get_node_embedding(self):
+        return self.node_embedding.weight.data.cpu().numpy()
 
-    def __make_table__(self, power=0.75):
-        """
-        Create a table using stored vocabulary node counts for drawing random nodes in the negative
-        sampling training routines.
-
-        Called internally from `build_vocab()`.
-
-        """
-        log.info("constructing a table with noise distribution from %i nodes" % len(self.vocab))
-        # table (= list of nodes) of noise distribution for negative sampling
-        vocab_size = len(self.vocab)
-        self.table = t.zeros(self.table_size).type(f_type)
-
-        if not vocab_size:
-            log.error("empty vocabulary in, is this intended?")
-            return
-
-        # compute sum of all power (Z in paper)
-        train_nodes_pow = float(sum([self.vocab[node].count**power for node in self.vocab]))
-        # go through the whole table and fill it up with the node indexes proportional to a node's count**power
-        node_id = 1
-        # normalize count^0.75 by Z
-        d1 = self.vocab[node_id].count**power / train_nodes_pow
-        log.debug("-----------Check if it has to be sorted by count or node_id--------")
-        for tidx in range(self.table_size):
-            self.table[tidx] = node_id
-            if 1.0 * tidx / self.table_size > d1:
-                node_id += 1
-                d1 += self.vocab[node_id].count**power / train_nodes_pow
-            if node_id >= vocab_size:
-                node_id = vocab_size - 1
-        log.info('max negative sample table %d' % max(self.table))
 
 
 

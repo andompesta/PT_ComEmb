@@ -8,7 +8,7 @@ from scipy.special import expit as sigmoid
 
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
 
-long_tensor = t.cuda.LongTensor
+long_tensor = t.LongTensor
 
 def batch_generator(iterable, chunksize):
     """
@@ -28,7 +28,7 @@ def batch_generator(iterable, chunksize):
             yield long_tensor(b_input), long_tensor(b_output)
             b_input, b_output = map(list, zip(*itertools.islice(it, int(chunksize))))
     except ValueError as e:
-        log.debug("end of dataset")
+        log.info("end of dataset")
 
 
     # batch_input = [[]]

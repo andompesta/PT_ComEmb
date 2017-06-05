@@ -9,6 +9,8 @@ import psutil
 from pt_model.model import ComEModel
 from pt_model.context_embedding import Context2Emb
 from pt_model.node_embedding import Node2Emb
+from pt_model.communities_embedding import Community2Emb
+
 import sys
 import utils.IO_utils as io_utils
 import utils.graph_utils as graph_utils
@@ -48,7 +50,7 @@ def learn_first(network, lr, model, edges, num_iter=1):
     :param num_iter: iteration number over the edges
     :return: 
     """
-    log.info("computing o1 and o3")
+    log.info("computing o1")
     optimizer = SGD(network.parameters(), lr)
     for batch in emb_utils.batch_generator(
             emb_utils.prepare_sentences(model,
@@ -62,7 +64,7 @@ def learn_first(network, lr, model, edges, num_iter=1):
         loss.backward()
         optimizer.step()
 
-def learn_second(network, lr, model, examples_files):
+def learn_second(network, lr, model, examples_files, alpha=1.0):
     """
     Helper function used to optimize O1 and O3
     :param loss: loss to optimize
@@ -74,13 +76,14 @@ def learn_second(network, lr, model, examples_files):
     """
     log.info("compute o2")
     optimizer = SGD(network.parameters(), lr)
+    log.debug("read example file: {}".format("\t".join(examples_files)))
     for batch in emb_utils.batch_generator(
             emb_utils.prepare_sentences(model,
                                         graph_utils.combine_example_files_iter(examples_files),
                                         network.transfer_fn(model.vocab)),
             20):
         input, output = batch
-        loss = network.forward(input, output, negative_sampling_fn=model.negative_sample)
+        loss = (alpha * network.forward(input, output, negative_sampling_fn=model.negative_sample))
 
         optimizer.zero_grad()
         loss.backward()
@@ -93,10 +96,10 @@ if __name__ == "__main__":
     negative = 4
     representation_size = 2
     num_workers = 1
-    alpha = 0.1
-    lambda_1 = 1.0
-    lambda_2 = 1.0
-
+    lr = 0.1
+    alpha = 1.0
+    beta = 1.0
+    num_iter = 200
     input_file = "karate"
     output_file = "karate_my"
 
@@ -109,7 +112,7 @@ if __name__ == "__main__":
     # neg_loss = Context2Emb(deprecated_model, negative)
     o1_loss = Node2Emb(model, negative)
     o2_loss = Context2Emb(model, negative)
-
+    o3_loss = ComEModel
 
     node_color = plot_utils.graph_plot(G=G,
                                        show=False,
@@ -118,6 +121,7 @@ if __name__ == "__main__":
                                        node_position_path='./data')
 
     exmple_filebase = os.path.join("./data/", output_file + ".exmple")                       # where read/write the sampled path
+    num_iter = G.number_of_nodes() * num_walks * walk_length
 
     # Sampling the random walks for context
     log.info("sampling the paths")
@@ -131,9 +135,20 @@ if __name__ == "__main__":
     edges = np.array(G.edges())
     edges = np.concatenate((edges, np.fliplr(edges)))
 
-    # learn_first(o1_loss, alpha, deprecated_model, edges, num_iter=100)
-    learn_second(o2_loss, alpha, model, examples_files)
+    learn_first(o1_loss, lr, model, edges, num_iter=num_iter)
+    learn_second(o2_loss, lr, model, examples_files, alpha=alpha)
 
     assert np.array_equal(o1_loss.input_embeddings(), o2_loss.input_embeddings()), "node embedding is not the same"
-    word_embeddings = o1_loss.input_embeddings()
-    io_utils.save(word_embeddings, "pytorch_embedding_o2", path="./data")
+    node_embeddings = o1_loss.input_embeddings()
+
+    # test o3
+
+
+
+
+    io_utils.save(node_embeddings, "pytorch_embedding_ws-{}_rs-{}_alpha-{}_lr-{}_iter-{}".format(window_size,
+                                                                                                 representation_size,
+                                                                                                 alpha,
+                                                                                                 lr,
+                                                                                                 num_iter),
+                  path="./data")

@@ -8,7 +8,7 @@ import numpy as np
 
 input_file = 'karate'
 
-node_embedding = io_utils.load(path='../data', file_name="pytorch_embedding_o2.bin")
+node_embedding = io_utils.load(path='../data', file_name="pytorch_embedding_test_o2.bin")
 g = mixture.GaussianMixture(n_components=2, reg_covar=0.000001, covariance_type='full', n_init=5)
 g.fit(node_embedding)
 centroid = np.float32(g.means_)
@@ -17,7 +17,7 @@ covariance_mat = np.float32(g.covariances_)
 
 G = graph_utils.load_adjacencylist(path_join("../data/", input_file, input_file + '.adjlist'), True)
 node_color = plot_utils.graph_plot(G=G,
-                                   show=True,
+                                   show=False,
                                    graph_name="karate",
                                    node_position_file=True,
                                    node_position_path='../data')
