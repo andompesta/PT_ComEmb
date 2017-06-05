@@ -40,7 +40,7 @@ def debug(type_, value, tb):
         pdb.pm()
 
 
-def learn_first(network, lr, model, edges, num_iter=1):
+def learn_first(network, lr, model, edges, num_iter=1, batch_size=20):
     """
     Helper function used to optimize O1 and O3
     :param network: neural network to train
@@ -48,23 +48,34 @@ def learn_first(network, lr, model, edges, num_iter=1):
     :param model: deprecated_model used to compute the batches and the negative sampling
     :param edges: numpy list of edges used for training
     :param num_iter: iteration number over the edges
-    :return: 
+    :param batch_size: size of the batch
+    :return: loss value
     """
     log.info("computing o1")
     optimizer = SGD(network.parameters(), lr)
+
+    num_batch = 0
+    total_batch = (edges.shape[0] * num_iter) / batch_size
+
     for batch in emb_utils.batch_generator(
             emb_utils.prepare_sentences(model,
                                         emb_utils.RepeatCorpusNTimes(edges, n=num_iter),
                                         network.transfer_fn(model.vocab)),
-            20):
+            batch_size):
         input, output = batch
         loss = network.forward(input, output, negative_sampling_fn=model.negative_sample)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        num_batch += 1
 
-def learn_second(network, lr, model, examples_files, alpha=1.0):
+        if (num_batch) % 10000 == 0:
+            log.info("community embedding batches completed: {}".format(num_batch/total_batch))
+
+    return loss
+
+def learn_second(network, lr, model, examples_files, total_example, alpha=1.0, batch_size=20):
     """
     Helper function used to optimize O1 and O3
     :param loss: loss to optimize
@@ -72,8 +83,11 @@ def learn_second(network, lr, model, examples_files, alpha=1.0):
     :param model: deprecated_model used to compute the batches and the negative sampling
     :param examples_files: list of files containing the examples
     :param num_iter: iteration number over the edges
-    :return: 
+    :return: loss value
     """
+
+    num_batch = 0
+
     log.info("compute o2")
     optimizer = SGD(network.parameters(), lr)
     log.debug("read example file: {}".format("\t".join(examples_files)))
@@ -81,13 +95,19 @@ def learn_second(network, lr, model, examples_files, alpha=1.0):
             emb_utils.prepare_sentences(model,
                                         graph_utils.combine_example_files_iter(examples_files),
                                         network.transfer_fn(model.vocab)),
-            20):
+            batch_size):
         input, output = batch
         loss = (alpha * network.forward(input, output, negative_sampling_fn=model.negative_sample))
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        num_batch += 1
+
+        if (num_batch) % 10000 == 0:
+            log.info("community embedding batches completed: {}".format(num_batch/(total_example/batch_size)))
+
+    return loss
 
 if __name__ == "__main__":
     num_walks = 10
@@ -136,7 +156,8 @@ if __name__ == "__main__":
     edges = np.concatenate((edges, np.fliplr(edges)))
 
     learn_first(o1_loss, lr, model, edges, num_iter=num_iter)
-    learn_second(o2_loss, lr, model, examples_files, alpha=alpha)
+    learn_second(o2_loss, lr, model, examples_files, total_example=(G.number_of_nodes() * walk_length * num_walks * (2*(window_size-1))),
+                 alpha=alpha)
 
     assert np.array_equal(o1_loss.input_embeddings(), o2_loss.input_embeddings()), "node embedding is not the same"
     node_embeddings = o1_loss.input_embeddings()

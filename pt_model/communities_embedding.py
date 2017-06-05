@@ -54,7 +54,7 @@ class Community2EmbFn(Function):
             # check if can be done as matrix operation
             ret_loss += rd.logpdf(input.cpu().numpy()) * self.pi[:, com]
 
-        ret_loss = float_tensor([ret_loss.sum()])
+        ret_loss = float_tensor([abs(ret_loss.sum())])
 
         return ret_loss * (-self.beta/self.k)
 
