@@ -8,7 +8,7 @@ import numpy as np
 
 input_file = 'karate'
 
-node_embedding = io_utils.load(path='../data', file_name="pytorch_embedding_test_o2.bin")
+node_embedding = io_utils.load_embedding(path='../data', file_name="pytorch_embedding_ws-3_rs-2_alpha-1.0_lr-0.1_iter-0")
 g = mixture.GaussianMixture(n_components=2, reg_covar=0.000001, covariance_type='full', n_init=5)
 g.fit(node_embedding)
 centroid = np.float32(g.means_)

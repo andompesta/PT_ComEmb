@@ -5,12 +5,25 @@ import numpy as np
 from os.path import join as path_join, dirname
 from os import makedirs
 
-def save_ground_true(path, community_color):
-    with open(path, 'w') as txt_file:
-        for node, com in enumerate(community_color):
+def save_ground_true(file_name, labels, path="./data"):
+    """
+    save the labels of a graph
+    :param file_name: name of the file where to same the labels
+    :param path: path to the directory where to save the file
+    :param community_color: list containing the labels
+    :return:
+    """
+    with open(path_join(path, file_name + ".labels"), 'w') as txt_file:
+        for node, com in enumerate(labels):
             txt_file.write('%d\t%d\n' % ((node+1), com))
 
-def load_ground_true(path='./data', file_name=None):
+def load_ground_true(file_name, path='./data'):
+    """
+    load the ground true for a given graph
+    :param path: path of the directory where the file is located
+    :param file_name: name of the file to load
+    :return:
+    """
     temp = []
     with open(path_join(path, file_name + '.labels'), 'r') as file:
         for line_no, line in enumerate(file):
@@ -21,11 +34,25 @@ def load_ground_true(path='./data', file_name=None):
     return ground_true, k
 
 def save_embedding(embeddings, file_name, path='./data'):
+    """
+    Function used to save the embedding
+    :param embeddings: numpy matrix to save
+    :param file_name: name of the file where to save the data
+    :param path: location where to save the file
+    :return:
+    """
     with open(path_join(path, file_name + '.txt'), 'w') as file:
         for node_id, embed in enumerate(embeddings):
             file.write(str(node_id+1) + '\t' + " ".join([str(val) for val in embed]) + '\n')
 
 def load_embedding(file_name, path='data', ext=".txt"):
+    """
+    Load the embedding saved in a .txt file
+    :param file_name: name of the file to load
+    :param path: location of the file
+    :param ext: extension of the file to load
+    :return:
+    """
     ret = []
     with open(path_join(path, file_name + ext), 'r') as file:
         for line in file:

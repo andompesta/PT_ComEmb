@@ -42,10 +42,10 @@ def debug(type_, value, tb):
 
 def learn_first(network, lr, model, edges, num_iter=1, batch_size=20):
     """
-    Helper function used to optimize O1 and O3
+    Helper function used to optimize O1
     :param network: neural network to train
     :param lr: learning rate
-    :param model: deprecated_model used to compute the batches and the negative sampling
+    :param model: model containing the shared data
     :param edges: numpy list of edges used for training
     :param num_iter: iteration number over the edges
     :param batch_size: size of the batch
@@ -56,15 +56,16 @@ def learn_first(network, lr, model, edges, num_iter=1, batch_size=20):
 
     num_batch = 0
     total_batch = (edges.shape[0] * num_iter) / batch_size
-
+    loss_val = 0
     for batch in emb_utils.batch_generator(
             emb_utils.prepare_sentences(model,
-                                        emb_utils.RepeatCorpusNTimes(edges, n=num_iter),
+                                        edges,
                                         network.transfer_fn(model.vocab)),
             batch_size):
         input, output = batch
         loss = network.forward(input, output, negative_sampling_fn=model.negative_sample)
 
+        loss_val += loss.data[0]
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -73,16 +74,19 @@ def learn_first(network, lr, model, edges, num_iter=1, batch_size=20):
         if (num_batch) % 10000 == 0:
             log.info("community embedding batches completed: {}".format(num_batch/total_batch))
 
-    return loss
+    log.debug("O1 loss: {}".format(loss_val))
+    return loss_val
 
 def learn_second(network, lr, model, examples_files, total_example, alpha=1.0, batch_size=20):
     """
-    Helper function used to optimize O1 and O3
-    :param loss: loss to optimize
+    Helper function used to optimize O2
+    :param network: network model to optimize
     :param lr: learning rate
-    :param model: deprecated_model used to compute the batches and the negative sampling
+    :param model: model containing the shared data
     :param examples_files: list of files containing the examples
-    :param num_iter: iteration number over the edges
+    :param total_example: total example for training
+    :param alpha: trade-off param
+    :param batch_size: size of the batch
     :return: loss value
     """
 
@@ -91,6 +95,11 @@ def learn_second(network, lr, model, examples_files, total_example, alpha=1.0, b
     log.info("compute o2")
     optimizer = SGD(network.parameters(), lr)
     log.debug("read example file: {}".format("\t".join(examples_files)))
+    loss_val = 0
+
+    if alpha <= 0:
+        return loss_val
+
     for batch in emb_utils.batch_generator(
             emb_utils.prepare_sentences(model,
                                         graph_utils.combine_example_files_iter(examples_files),
@@ -98,6 +107,7 @@ def learn_second(network, lr, model, examples_files, total_example, alpha=1.0, b
             batch_size):
         input, output = batch
         loss = (alpha * network.forward(input, output, negative_sampling_fn=model.negative_sample))
+        loss_val += loss.data[0]
 
         optimizer.zero_grad()
         loss.backward()
@@ -107,7 +117,53 @@ def learn_second(network, lr, model, examples_files, total_example, alpha=1.0, b
         if (num_batch) % 10000 == 0:
             log.info("community embedding batches completed: {}".format(num_batch/(total_example/batch_size)))
 
-    return loss
+    log.debug("O2 loss: {}".format(loss_val))
+    return loss_val
+
+
+def learn_community(network, lr, model, nodes, num_iter=1, beta=1.0, batch_size=20):
+    """
+    Helper function used to optimize O3
+    :param network: model to optimize
+    :param lr: learning rate
+    :param model: model containing the shared data
+    :param nodes: nodes on which execute the learning
+    :param num_iter: iteration number over the nodes
+    :param beta: trade-off value
+    :param batch_size: size of the batch
+    :return: loss value
+    """
+
+    num_batch = 0
+
+    log.info("compute o3")
+    optimizer = SGD(network.parameters(), lr)
+    loss_val = 0
+
+    if beta <= 0.:
+        return loss_val
+
+    for batch in emb_utils.batch_generator(
+            emb_utils.prepare_sentences(model,
+                                        nodes,
+                                        network.transfer_fn()),
+            batch_size):
+
+        input, output = batch
+        loss = network.forward(input, model)
+        loss.data *= (beta/model.k)
+        loss_val += loss.data[0]
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        num_batch += 1
+
+        if (num_batch) % 10000 == 0:
+            log.info("community embedding batches completed: {}".format(num_batch/(total_example/batch_size)))
+
+    log.debug("O3 loss: {}".format(loss_val))
+    return loss_val
 
 if __name__ == "__main__":
     num_walks = 10
@@ -119,9 +175,12 @@ if __name__ == "__main__":
     lr = 0.1
     alpha = 1.0
     beta = 1.0
-    num_iter = 200
+    batch_size = 20
     input_file = "karate"
     output_file = "karate_my"
+
+
+
 
     G = graph_utils.load_adjacencylist('./data/' + input_file + '/' + input_file + '.adjlist', True)
     model = ComEModel(G.degree(),
@@ -129,10 +188,14 @@ if __name__ == "__main__":
                       input_file=input_file + '/' + input_file,
                       path_labels="./data")
 
+
+    total_example = (G.number_of_nodes() * walk_length * num_walks * (2 * (window_size - 1)))
+    num_iter = int(total_example/(G.number_of_nodes() * 2))
+
     # neg_loss = Context2Emb(deprecated_model, negative)
     o1_loss = Node2Emb(model, negative)
     o2_loss = Context2Emb(model, negative)
-    o3_loss = ComEModel
+    o3_loss = Community2Emb(model, reg_covar=0.00001)
 
     node_color = plot_utils.graph_plot(G=G,
                                        show=False,
@@ -155,21 +218,34 @@ if __name__ == "__main__":
     edges = np.array(G.edges())
     edges = np.concatenate((edges, np.fliplr(edges)))
 
-    learn_first(o1_loss, lr, model, edges, num_iter=num_iter)
-    learn_second(o2_loss, lr, model, examples_files, total_example=(G.number_of_nodes() * walk_length * num_walks * (2*(window_size-1))),
-                 alpha=alpha)
-
-    assert np.array_equal(o1_loss.input_embeddings(), o2_loss.input_embeddings()), "node embedding is not the same"
-    node_embeddings = o1_loss.input_embeddings()
-
-    # test o3
-
-
-
-
-    io_utils.save(node_embeddings, "pytorch_embedding_ws-{}_rs-{}_alpha-{}_lr-{}_iter-{}".format(window_size,
-                                                                                                 representation_size,
-                                                                                                 alpha,
-                                                                                                 lr,
-                                                                                                 num_iter),
+    io_utils.save_embedding(model.get_node_embedding(), "pytorch_embedding_random",
                   path="./data")
+
+    # pre-training phase
+    learn_second(o2_loss, lr, model, examples_files, total_example=total_example, alpha=alpha)
+    learn_first(o1_loss, lr, model, edges, num_iter=num_iter)
+
+    io_utils.save_embedding(model.get_node_embedding(), "pytorch_embedding_pre-train",
+                  path="./data")
+
+    assert np.array_equal(o1_loss.input_embeddings(), o2_loss.input_embeddings()), "node embedding is not consistent"
+    assert np.array_equal(model.get_node_embedding(), o1_loss.input_embeddings()), "node embedding is not consistent"
+
+    for it in range(1):
+        o3_loss.fit(model)
+        learn_first(o1_loss, lr, model, edges, num_iter=num_iter)
+        learn_community(o3_loss, lr, model, zip(G.nodes_iter(), np.ones(G.number_of_nodes())),
+                        beta=beta,
+                        batch_size=batch_size)
+        learn_second(o2_loss, lr, model, examples_files,
+                     total_example=total_example,
+                     alpha=alpha)
+
+
+
+        io_utils.save_embedding(model.get_node_embedding(), "pytorch_embedding_ws-{}_rs-{}_alpha-{}_lr-{}_iter-{}".format(window_size,
+                                                                                                     representation_size,
+                                                                                                     alpha,
+                                                                                                     lr,
+                                                                                                     it),
+                      path="./data")
