@@ -32,6 +32,7 @@ def batch_generator(iterable, batch_size, long_tensor=t.LongTensor):
     except ValueError as e:
         log.info("end of dataset")
 
+
 def prepare_sentences(model, examples, transfer_fn):
     '''
     Convert the paths from node_id to node_index and perform subsampling if setted in the model

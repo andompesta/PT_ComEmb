@@ -12,7 +12,7 @@ from torch.nn import Parameter
 
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
 
-f_type = t.FloatTensor
+float_tensor = None
 
 class ComEModel(object):
     '''
@@ -25,7 +25,8 @@ class ComEModel(object):
                  down_sampling=0,
                  seed=1,
                  path_labels='data/',
-                 input_file=None):
+                 input_file=None,
+                 f_type=t.FloatTensor):
         '''
         :param nodes_degree: Dict with node_id: degree of node
         :param size: projection space
@@ -37,6 +38,9 @@ class ComEModel(object):
         :param input_file: name of the file containing the ground true (label for each node)
         :return:
         '''
+        global float_tensor
+        float_tensor = f_type
+
         self.down_sampling = down_sampling
         self.seed = seed
 
@@ -92,11 +96,11 @@ class ComEModel(object):
         """Reset all projection weights to an initial (untrained) state, but keep the existing vocabulary."""
         self.size = len(self.vocab)
         self.node_embedding = nn.Embedding(self.size, self.layer1_size)
-        self.node_embedding.weight = Parameter(f_type(self.size, self.layer1_size).uniform_(-1, 1))
+        self.node_embedding.weight = Parameter(float_tensor(self.size, self.layer1_size).uniform_(-1, 1))
 
 
         self.context_embedding = nn.Embedding(self.size, self.layer1_size)
-        self.context_embedding.weight = Parameter(t.zeros(self.size, self.layer1_size).type(f_type))
+        self.context_embedding.weight = Parameter(t.zeros(self.size, self.layer1_size).type(float_tensor))
 
     def compute_negative_sampling_weight(self, power=0.75):
         """

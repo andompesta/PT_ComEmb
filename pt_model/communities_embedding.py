@@ -9,9 +9,8 @@ import torch as t
 from torch.autograd import Function, Variable
 
 log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
+float_tensor = None
 
-float_tensor = t.FloatTensor
-long_tensor = t.LongTensor
 
 class Community2EmbFn(Function):
     def __init__(self, model, input_idx):
@@ -71,7 +70,7 @@ class Community2EmbFn(Function):
 
 class Community2Emb(nn.Module):
     '''scipy based GMM/BGMM model'''
-    def __init__(self, model, reg_covar=0):
+    def __init__(self, model, reg_covar=0, f_type=t.FloatTensor):
         '''
         :param window: windows size used to compute the context embeddings
         :return:
@@ -79,6 +78,8 @@ class Community2Emb(nn.Module):
         super(Community2Emb, self).__init__()
         self.node_embedding = model.node_embedding
         self.g_mixture = mixture.GaussianMixture(n_components=model.k, reg_covar=reg_covar, covariance_type='full', n_init=10)
+        global float_tensor
+        float_tensor = f_type
 
     def get_node_embedding(self):
         return self.node_embedding.weight.data.cpu().numpy()

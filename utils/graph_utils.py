@@ -2,7 +2,7 @@ __author__ = 'ando'
 
 import numpy as np
 from time import time
-import logging as log
+import logging
 import random
 
 import networkx as nx
@@ -14,7 +14,7 @@ from os import path
 from collections import Counter
 import os.path
 
-log.basicConfig(format='%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s', level=log.DEBUG)
+logger = logging.getLogger("deepwalk")
 
 
 def get_adj_matrix(G):
@@ -138,13 +138,13 @@ def load_adjacencylist(file_, undirected=False, chunksize=10000):
     t1 = time()
     adjlist = np.asarray(adjlist)
 
-    log.info('Parsed {} edges with {} chunks in {}s'.format(total, idx, t1-t0))
+    logger.info('Parsed {} edges with {} chunks in {}s'.format(total, idx, t1-t0))
 
     t0 = time()
     G = convert_func(adjlist)
     t1 = time()
 
-    log.info('Converted edges to graph in {}s'.format(t1-t0))
+    logger.info('Converted edges to graph in {}s'.format(t1-t0))
 
     if undirected:
         G = G.to_undirected()
@@ -164,7 +164,7 @@ def _write_walks_to_disk(args):
     with open(f, 'w') as fout:
         for walk in build_deepwalk_corpus_iter(G=G, num_paths=num_paths, path_length=path_length, alpha=alpha, rand=rand):
             fout.write(u"{}\n".format(u" ".join(__vertex2str[v] for v in walk)))
-    log.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
+    logger.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
     return f
 
 def _write_examples_to_disk(args):
@@ -203,7 +203,7 @@ def _write_examples_to_disk(args):
         for walk in build_deepwalk_corpus_iter(G=G, num_paths=num_paths, path_length=path_length, alpha=alpha, rand=rand):
             for in_label, out_label in generate_labels(walk):
                 fout.write("{}\t{}\n".format(in_label, " ".join(__vertex2str[v] for v in out_label)))
-    log.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
+    logger.debug("Generated new file {}, it took {} seconds".format(f, time() - t_0))
     return f
 
 # def write_walks_to_disk(G, filebase, num_paths, path_length, alpha=0, rand=random.Random(0), num_workers=cpu_count(), always_rebuild=True):
@@ -327,16 +327,17 @@ def build_deepwalk_corpus_iter(G, num_paths, path_length, alpha=0, rand=random.R
     Generate the random walks
     :param G: Graph on which walk
     :param num_paths: number of walks to generate for each node
-    :param path_length: length of each path
-    :param alpha: restart probability of the walker
-    :param rand: random seed to used
+    :param path_length: lengtht of each path
+    :param alpha:
+    :param rand:
     :return:
     """
+    walks = []
     nodes = list(G.nodes())
     for cnt in range(num_paths):
         rand.shuffle(nodes)
         for node in nodes:
-            yield __random_walk__(G, path_length, rand=rand, alpha=alpha, start=node)
+            yield __random_walk__(G,path_length, rand=rand, alpha=alpha, start=node)
 
 
 def count_textfiles(files, workers=1):

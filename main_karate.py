@@ -17,7 +17,8 @@ import utils.graph_utils as graph_utils
 import utils.plot_utils as plot_utils
 import utils.embedding as emb_utils
 from torch.optim.sgd import SGD
-
+from torch import FloatTensor, LongTensor
+from torch.cuda import FloatTensor as CudaFloatTensor, LongTensor as CudaLongTensor
 
 
 p = psutil.Process(os.getpid())
@@ -61,7 +62,9 @@ def learn_first(network, lr, model, edges, num_iter=1, batch_size=20):
             emb_utils.prepare_sentences(model,
                                         edges,
                                         network.transfer_fn(model.vocab)),
-            batch_size):
+            batch_size,
+            long_tensor=LongTensor):
+
         input, output = batch
         loss = network.forward(input, output, negative_sampling_fn=model.negative_sample)
 
@@ -104,7 +107,8 @@ def learn_second(network, lr, model, examples_files, total_example, alpha=1.0, b
             emb_utils.prepare_sentences(model,
                                         graph_utils.combine_example_files_iter(examples_files),
                                         network.transfer_fn(model.vocab)),
-            batch_size):
+            batch_size,
+            long_tensor=LongTensor):
         input, output = batch
         loss = (alpha * network.forward(input, output, negative_sampling_fn=model.negative_sample))
         loss_val += loss.data[0]
@@ -121,14 +125,13 @@ def learn_second(network, lr, model, examples_files, total_example, alpha=1.0, b
     return loss_val
 
 
-def learn_community(network, lr, model, nodes, num_iter=1, beta=1.0, batch_size=20):
+def learn_community(network, lr, model, nodes, beta=1.0, batch_size=20):
     """
     Helper function used to optimize O3
     :param network: model to optimize
     :param lr: learning rate
     :param model: model containing the shared data
     :param nodes: nodes on which execute the learning
-    :param num_iter: iteration number over the nodes
     :param beta: trade-off value
     :param batch_size: size of the batch
     :return: loss value
@@ -147,7 +150,8 @@ def learn_community(network, lr, model, nodes, num_iter=1, beta=1.0, batch_size=
             emb_utils.prepare_sentences(model,
                                         nodes,
                                         network.transfer_fn()),
-            batch_size):
+            batch_size,
+            long_tensor=LongTensor):
 
         input, output = batch
         loss = network.forward(input, model)
@@ -186,7 +190,8 @@ if __name__ == "__main__":
     model = ComEModel(G.degree(),
                       size=representation_size,
                       input_file=input_file + '/' + input_file,
-                      path_labels="./data")
+                      path_labels="./data",
+                      f_type=FloatTensor)
 
 
     total_example = (G.number_of_nodes() * walk_length * num_walks * (2 * (window_size - 1)))

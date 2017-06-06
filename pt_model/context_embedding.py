@@ -50,6 +50,7 @@ class Context2Emb(nn.Module):
 
         if use_cuda:
             noise = noise.cuda()
+
         noise = self.context_embedding(noise).neg()
 
         log_target = (input * output).sum(1).squeeze().sigmoid().log()          # loss of the positive example
